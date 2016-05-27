@@ -5,13 +5,15 @@
 # 
 
 import numpy as np
+import sys
+import glob
 import fsSerial
 import time
 
 # Configuration parameters
 
 robotPort = '/dev/ttyACM0'
-dispenserPort = '/dev/tty'
+dispenserPort = '/dev/ttyACM1'
 startWellPoint = np.array([-49.25, 31.0])
 endWellPoint = np.array([50.75, -33.0])
 
@@ -67,8 +69,27 @@ def getWell(i):
 	coords = startWellPoint + (int(i/12))*minorBasis + (i%12)*majorBasis
 	return coords
 
-robot = fsSerial.fsSerial(robotPort)
-#dispenser = fsSerial(dispenserPort)
+
+portList = glob.glob('/dev/ttyACM*')
+if len(portList) != 2:
+	print "Port list should have exactly two items:", portList, len(portList)
+	exit()
+
+for p in portList:
+	print "Trying port:", p
+	tempPort = fsSerial.fsSerial(p)
+	tempPort.sendCmd('V')
+	time.sleep(1)
+	r=tempPort.getSerOutput()
+	if r.startswith("  V"):
+		print "Port:", p, "is dispenser"
+		dispenser = tempPort
+		dispenser.ser.flushInput()
+		time.sleep(1)
+		dispenser.sendSyncCmd("I")
+	else:
+		print "Port:", p, "is assumed to be printrboard"
+		robot = tempPort
 
 print "Well height:", wellHeight
 
@@ -76,15 +97,28 @@ robot.sendSyncCmd("G28\n")
 robot.sendSyncCmd("G01 F3000\n")
 robot.sendSyncCmd("G01 Z{0}\n".format(clearanceHeight))
 
-for i in range(8):
-	wellCoords = getWell(13*i)
+for i in range(96):
+	wellCoords = getWell(i)
 	robot.sendSyncCmd("G01 X{0} Y{1}\n".format(wellCoords[0], wellCoords[1]))
 	robot.sendSyncCmd("G01 Z{0}\n".format(wellHeight))
 	robot.sendSyncCmd("G04 P1\n")
-	time.sleep(1)
+	dispenser.sendSyncCmd('F')
+	r = ""
+	while r == "":
+		time.sleep(0.25)
+		r = dispenser.getSerOutput()
+	s = r.rstrip("\n\r")
+	print "Dispenser reply:", s
+	if ( s == "f" ):
+		print "Dispensed fly", i
+	else:
+		print "Failed to dispense fly."
+		break
 	robot.sendSyncCmd("G01 Z{0}\n".format(clearanceHeight))
 
 
 robot.sendSyncCmd("G28\n")
+
 robot.close()
+dispenser.close()
 
