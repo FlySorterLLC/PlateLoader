@@ -22,8 +22,6 @@ wellHeight = 19
 
 # End configuration parameters
 
-
-
 wellSpacing = 9.
 majorBasis = np.array([9.09, 0.])
 minorBasis = np.array([0., -9.09])
