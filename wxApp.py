@@ -17,8 +17,9 @@ from threading import *
 import numpy as np
 import sys
 import glob
-import fsSerial
 import time
+
+import fsSerial
 
 # Configuration parameters
 
@@ -43,7 +44,7 @@ def EVT_RESULT(win, func):
   """Define Result Event."""
   win.Connect(-1, -1, EVT_RESULT_ID, func)
 
-# Data should be:
+# data in event should be:
 #
 # None     - if worker thread completed plate loading task without error
 # 1 - 96   - if worker thread successfully loaded that well number (1-based)
@@ -83,18 +84,50 @@ class WorkerThread(Thread):
        robot.sendSyncCmd("G04 P1\n")
        # And dispense a fly
        dispenser.sendSyncCmd('F')
-       r = ""
-       while r == "":
-         time.sleep(0.25)
-         r = dispenser.getSerOutput()
-       s = r.rstrip("\n\r")
+       print "Initial fly dispense, well #", self._currentWell
+       dispensing = 1
+       pCount=0
+       # Loop here so we can process subsequent purge or dispense commands
+       # with the same code
+       while (dispensing == 1) and (pCount < 4):
+         print " pCount =", pCount
+         r = ""
+         while r == "":
+           time.sleep(0.25)
+           r = dispenser.getSerOutput()
+         s = r.rstrip("\n\r")
+         # Dispenser returns 'f' on success 
+         if ( s == "f" ):
+           wx.PostEvent(self._notify_window, ResultEvent(self._currentWell+1))
+           dispensing = 0
+         elif ( s == "n" ):
+           # Saw a fly come through sensor below wheels, but not
+           # the dispenser pen. Try to purge.
+           if ( pCount == 0 ) or ( pCount == 2):
+             dispenser.sendSyncCmd('P')
+             print "  No fly. Purge"
+           elif ( pCount == 1 ) or ( pCount == 3):
+             dispenser.sendSyncCmd('F')
+             print "  No fly. Re-dispense"
+           pCount += 1
+         elif ( s == "t" ):
+           # Timeout at the dispenser - no fly after 15 s
+           # Try a few times
+           # If we couldn't dispense a fly, break out
+           if pCount < 2:
+             dispenser.sendSyncCmd('F')
+             print "  Timeout. Re-dispense"
+           else:
+             self._run_status = 0
+             dispensing = -1
+           pCount += 1
+         else:
+           print "  Received unexpected reply from dispenser:", s
+           self._run_status = 0
+           dispensing = -1
+       print "Status - Dispensing =", dispensing, " and pCount=", pCount
        robot.sendSyncCmd("G01 Z{0}\n".format(clearanceHeight))
-       # Dispenser returns 'f' on success 
-       if ( s == "f" ):
-         wx.PostEvent(self._notify_window, ResultEvent(self._currentWell+1))
-       else:
-         # If we couldn't dispense a fly, break out
-         self._run_status = 0
+       if (dispensing == -1):
          break
        # Increment well counter
        self._currentWell += 1
@@ -108,6 +141,7 @@ class WorkerThread(Thread):
       # Otherwise we're done. If we didn't quit, it means
       # we're also done with the whole plate (send event with data=None)
       if ( self._want_abort == 0 ) or ( self._currentWell > 95):
+	robot.sendSyncCmd("G01 X0 Y40 Z{0}\n".format(clearanceHeight))
         wx.PostEvent(self._notify_window, ResultEvent(None))
       else:
         wx.PostEvent(self._notify_window, ResultEvent(-(self._currentWell+1)))
@@ -209,6 +243,7 @@ class LoaderFrame(wx.Frame):
     if result == wx.ID_OK:
       print "Wrapping up & closing serial ports."
       robot.sendSyncCmd("G28\n")
+      robot.sendSyncCmd("M84\n")
       robot.close()
       dispenser.close()
       self.Destroy()
@@ -219,10 +254,9 @@ class LoaderFrame(wx.Frame):
     # or other thread is done.
     if event.data is None:
       # Task completed
-      self.startButton.SetLabel("Start")
+      self.startButton.Disable()
       self.resetButton.Enable()
       self.quitButton.Enable()
-      self.startState = 0
       self.worker = None
     elif event.data > 0:
       # Mark well as full
@@ -295,6 +329,7 @@ minorBasis = rotMat.dot(minorBasis)
 portList = glob.glob('/dev/ttyACM*')
 if len(portList) != 2:
   print "Port list should have exactly two items:", portList, len(portList)
+  time.sleep(5)
   exit()
 
 for p in portList:
