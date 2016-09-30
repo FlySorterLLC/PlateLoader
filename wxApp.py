@@ -96,8 +96,9 @@ class WorkerThread(Thread):
            time.sleep(0.25)
            r = dispenser.getSerOutput()
          s = r.rstrip("\n\r")
-         # Dispenser returns 'f' on success 
+         # Dispenser returns 'f' on successful dispense 
          if ( s == "f" ):
+           print "  Fly dispensed."
            wx.PostEvent(self._notify_window, ResultEvent(self._currentWell+1))
            dispensing = 0
          elif ( s == "n" ):
@@ -109,7 +110,6 @@ class WorkerThread(Thread):
            elif ( pCount == 1 ):
              dispenser.sendSyncCmd('F')
              print "  No fly. Re-dispense"
-           pCount += 1
          elif ( s == "t" ):
            # Timeout at the dispenser - no fly after 15 s
            # Try a few times
@@ -120,11 +120,11 @@ class WorkerThread(Thread):
            else:
              self._run_status = 0
              dispensing = -1
-           pCount += 1
          else:
            print "  Received unexpected reply from dispenser:", s
            self._run_status = 0
            dispensing = -1
+         pCount += 1
        print "Status - Dispensing =", dispensing, " and pCount=", pCount
        robot.sendSyncCmd("G01 Z{0}\n".format(clearanceHeight))
        if (dispensing == -1):
