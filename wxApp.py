@@ -89,7 +89,7 @@ class WorkerThread(Thread):
        pCount=0
        # Loop here so we can process subsequent purge or dispense commands
        # with the same code
-       while (dispensing == 1) and (pCount < 4):
+       while (dispensing == 1) and (pCount <= 3):
          print " pCount =", pCount
          r = ""
          while r == "":
@@ -106,7 +106,7 @@ class WorkerThread(Thread):
            if ( pCount == 0 ) or ( pCount == 2):
              dispenser.sendSyncCmd('P')
              print "  No fly. Purge"
-           elif ( pCount == 1 ) or ( pCount == 3):
+           elif ( pCount == 1 ):
              dispenser.sendSyncCmd('F')
              print "  No fly. Re-dispense"
            pCount += 1
@@ -220,6 +220,12 @@ class LoaderFrame(wx.Frame):
     self.currentWell = 0
     for i in range(len(self.bmpArray)):
       self.bmpArray[i].SetBitmap(self.emptyBitmap)
+    self.startButton.SetLabel("Start")
+    self.startButton.Enable()
+    self.resetButton.Enable()
+    self.quitButton.Enable()
+    self.startState = 0
+    self.worker = None
 
   # Start (or pause) button callback
   def OnStart(self, event):
