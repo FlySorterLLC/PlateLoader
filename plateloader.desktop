@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=FlySorter Plate Loader
+Comment=FlySorter Plate Loader GUI
+Icon=/usr/share/pixmaps/idle.xpm
+Exec=/home/pi/PlateLoader/PL.sh
+Type=Application
+Encoding=UTF-8
+Terminal=false
+Categories=None;

@@ -62,13 +62,14 @@ class ResultEvent(wx.PyEvent):
 # (a separate thread so the app remains responsive)
 class WorkerThread(Thread):
   """Worker Thread Class."""
-  def __init__(self, notify_window, start_val=0):
+  def __init__(self, notify_window, start_val=0, demoMode=0):
     """Init Worker Thread Class."""
     Thread.__init__(self)
     self._notify_window = notify_window
     self._want_abort = 0
     self._run_status = 1
     self._currentWell = start_val
+    self._demoMode = demoMode
     self.start()
 
   def run(self):
@@ -83,19 +84,28 @@ class WorkerThread(Thread):
        robot.sendSyncCmd("G01 Z{0}\n".format(wellHeight))
        robot.sendSyncCmd("G04 P1\n")
        # And dispense a fly
-       dispenser.sendSyncCmd('F')
+       if ( self._demoMode == 1 ):
+         time.sleep(1.2)
+       else:
+         dispenser.sendSyncCmd('F')
        print "Initial fly dispense, well #", self._currentWell
        dispensing = 1
        pCount=0
+       s = ""
+       r = ""
        # Loop here so we can process subsequent purge or dispense commands
        # with the same code
        while (dispensing == 1) and (pCount <= 3):
          print " pCount =", pCount
-         r = ""
-         while r == "":
-           time.sleep(0.25)
-           r = dispenser.getSerOutput()
-         s = r.rstrip("\n\r")
+         if ( self._demoMode ):
+           s = "f"
+         else:
+           r = ""
+           while r == "":
+             time.sleep(0.25)
+             r = dispenser.getSerOutput()
+           s = r.rstrip("\n\r")
+         print " s = ", s
          # Dispenser returns 'f' on successful dispense 
          if ( s == "f" ):
            print "  Fly dispensed."
@@ -235,7 +245,8 @@ class LoaderFrame(wx.Frame):
       self.quitButton.Disable()
       self.startState = 1
       if not self.worker:
-        self.worker = WorkerThread(self, start_val = self.currentWell )
+        self.worker = WorkerThread(self, start_val = self.currentWell,
+                                   demoMode = demoMode )
     else:
       self.startButton.Disable()
       self.worker.abort()
@@ -296,6 +307,15 @@ def getWell(i):
 
 
 # BEGIN PROGRAM
+
+# If we get called with the option "-demo" then run
+# in demo mode. No dispenser, so every well succeeds.
+if ( len(sys.argv) > 1 ):
+  if ( sys.argv[1] == "-demo" ):
+    demoMode = 1
+  else:
+    demoMode = 0
+
 
 # (Due to printrboard config, well spacing is off by ~1%)
 majorBasis = np.array([9.09, 0.])
